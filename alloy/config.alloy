@@ -1,0 +1,117 @@
+// Oculory — Grafana Alloy: single collector for LOGS (docker tail -> Loki) and
+// TRACES (OTLP receive -> tail-sample -> Tempo). River/Alloy syntax.
+
+// ============================================================ LOGS
+// Discover all running containers from the docker socket.
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+// Build labels from container metadata; drop Alloy's own logs to avoid loops.
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  // service = first dash-segment of the container name (gunvest/legion/horizon/oculury...)
+  rule {
+    source_labels = ["container"]
+    regex         = "([a-z]+)-.*"
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["container"]
+    regex         = "oculory-.*"
+    action        = "drop"
+  }
+}
+
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.containers.output
+  forward_to    = [loki.process.parse.receiver]
+  relabel_rules = discovery.relabel.containers.rules
+}
+
+// Parse structured pino/JSON logs: lift level + trace_id; keep raw line as the log body.
+loki.process "parse" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.json {
+    expressions = {
+      level    = "level",
+      trace_id = "trace_id",
+      msg      = "msg",
+    }
+  }
+  // pino emits numeric levels (30=info,40=warn,50=error); map to words for labels.
+  stage.template {
+    source   = "lvl"
+    template = "{{ if eq .level \"50\" }}error{{ else if eq .level \"40\" }}warn{{ else if eq .level \"30\" }}info{{ else if eq .level \"20\" }}debug{{ else }}{{ .level }}{{ end }}"
+  }
+  stage.labels {
+    values = { level = "lvl" }
+  }
+  // Expose trace_id as a structured-metadata field so Grafana can jump log -> trace.
+  stage.structured_metadata {
+    values = { trace_id = "trace_id" }
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://oculory-loki:3100/loki/api/v1/push"
+  }
+}
+
+// ============================================================ TRACES
+// Receive OTLP from the three apps (gRPC + HTTP).
+otelcol.receiver.otlp "default" {
+  grpc { endpoint = "0.0.0.0:4317" }
+  http { endpoint = "0.0.0.0:4318" }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces = [otelcol.processor.tail_sampling.default.input]
+  }
+}
+
+// Keep everything that matters; sample the boring fast successes.
+otelcol.processor.tail_sampling "default" {
+  decision_wait = "5s"
+
+  policy {
+    name = "errors"
+    type = "status_code"
+    status_code { status_codes = ["ERROR"] }
+  }
+  policy {
+    name = "slow"
+    type = "latency"
+    latency { threshold_ms = 500 }
+  }
+  policy {
+    name = "sample-rest"
+    type = "probabilistic"
+    probabilistic { sampling_percentage = 20 }
+  }
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "oculory-tempo:4317"
+    tls { insecure = true }
+  }
+}

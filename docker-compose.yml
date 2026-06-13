@@ -1,0 +1,248 @@
+# Oculory — observability platform for the GiveWGun Oracle A1 VM (ARM64).
+#
+# One self-contained stack: metrics (Prometheus), logs (Loki), traces (Tempo),
+# a single collector (Grafana Alloy), dashboards/alerting (Grafana + Alertmanager),
+# and the exporters that turn the host, containers, Postgres and NATS into metrics.
+#
+# It attaches to the three EXISTING shared networks so it can scrape/collect every
+# container by name without publishing extra host ports:
+#   docker_default  -> gunvest-app:3001, gunvest-db:5432
+#   app_legion      -> legion-nats:8222, legion-*:9100
+#   tunnel-gateway  -> horizon-app:8080, and serves Grafana to the cloudflared tunnel
+#
+# Only Grafana is reachable from the internet, and only through the Cloudflare
+# Tunnel + Cloudflare Access. Everything else binds to 127.0.0.1 for SSH-tunnel
+# debugging only.
+#
+#   docker compose --env-file .env up -d
+
+name: oculory
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ---------------------------------------------------------------- metrics
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: oculory-prometheus
+    restart: unless-stopped
+    user: root
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --storage.tsdb.retention.size=6GB
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [oculory, gunvest, legion, tunnel-gateway]
+    mem_limit: 1g
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- logs
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: oculory-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./loki/rules:/loki/rules:ro
+      - loki-data:/loki
+    ports:
+      - "127.0.0.1:3100:3100"
+    networks: [oculory]
+    mem_limit: 512m
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- traces
+  tempo:
+    image: grafana/tempo:2.7.1
+    container_name: oculory-tempo
+    restart: unless-stopped
+    command: -config.file=/etc/tempo/tempo-config.yml
+    volumes:
+      - ./tempo/tempo-config.yml:/etc/tempo/tempo-config.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "127.0.0.1:3200:3200"   # tempo query
+    networks: [oculory]
+    mem_limit: 512m
+    logging: *default-logging
+
+  # --------------------------------------------------- single telemetry collector
+  # Tails every container's stdout/stderr -> Loki, and receives OTLP traces from
+  # the apps -> Tempo (with tail-sampling). Replaces Promtail + a standalone OTel
+  # Collector. Must sit on the app networks so the apps can push OTLP to it.
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: oculory-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "127.0.0.1:12345:12345"  # Alloy UI
+    networks: [oculory, gunvest, legion, tunnel-gateway]
+    mem_limit: 512m
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- dashboards
+  grafana:
+    image: grafana/grafana:11.5.1
+    container_name: oculory-grafana
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PW:-admin}
+      GF_SERVER_ROOT_URL: https://oculory.givewgun.com
+      GF_SERVER_ENABLE_GZIP: "true"
+      # Cloudflare Access sits in front; keep Grafana's own login as a second gate.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [oculory, tunnel-gateway]
+    depends_on: [prometheus, loki, tempo]
+    mem_limit: 512m
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- alerting
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: oculory-alertmanager
+    restart: unless-stopped
+    env_file: .env
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks: [oculory]
+    mem_limit: 128m
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- exporters
+  # Per-container CPU/mem/net/disk + restart/OOM counters.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: oculory-cadvisor
+    restart: unless-stopped
+    privileged: true
+    command:
+      - --housekeeping_interval=15s
+      - --docker_only=true
+      - --store_container_labels=false
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    networks: [oculory]
+    mem_limit: 256m
+    logging: *default-logging
+
+  # Host USE: CPU/mem/disk/net/load.
+  node-exporter:
+    image: prom/node-exporter:v1.9.0
+    container_name: oculory-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.systemd
+      - --collector.processes
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [oculory]
+    mem_limit: 128m
+    logging: *default-logging
+
+  # gunvest-db (Postgres). Connects over the gunvest network (docker_default).
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: oculory-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: ${PG_EXPORTER_DSN}
+    networks: [oculory, gunvest]
+    mem_limit: 128m
+    logging: *default-logging
+
+  # legion-nats JetStream monitoring (:8222 -> requires `-m 8222` on the nats container).
+  nats-exporter:
+    image: natsio/prometheus-nats-exporter:0.16.0
+    container_name: oculory-nats-exporter
+    restart: unless-stopped
+    command:
+      - -varz
+      - -jsz=all
+      - -connz
+      - -routez
+      - -subz
+      - http://legion-nats:8222
+    networks: [oculory, legion]
+    mem_limit: 64m
+    logging: *default-logging
+
+  # Synthetic probes of the public hostnames + TLS expiry.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.26.0
+    container_name: oculory-blackbox-exporter
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox/blackbox.yml
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks: [oculory]
+    mem_limit: 64m
+    logging: *default-logging
+
+volumes:
+  prometheus-data:
+  loki-data:
+  tempo-data:
+  grafana-data:
+  alertmanager-data:
+  alloy-data:
+
+networks:
+  oculory:
+    driver: bridge
+  # Existing shared networks (created by the gunvest/legion stacks).
+  gunvest:
+    external: true
+    name: ${GUNVEST_NETWORK:-docker_default}
+  legion:
+    external: true
+    name: ${LEGION_NETWORK:-app_legion}
+  tunnel-gateway:
+    external: true

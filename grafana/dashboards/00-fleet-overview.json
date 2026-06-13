@@ -1,0 +1,107 @@
+{
+  "uid": "oculory-fleet",
+  "title": "Oculory — Fleet Overview",
+  "tags": ["oculory", "noc"],
+  "timezone": "Asia/Bangkok",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "row", "title": "Availability", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "state-timeline", "title": "Container up/down",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }, "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN" }, "1": { "text": "UP" } } } ] } },
+      "options": { "mergeValues": true, "showValue": "never" },
+      "targets": [ { "refId": "A", "expr": "max by (name) (container_last_seen{name=~\"gunvest-.*|legion-.*|horizon-.*|global-tunnel\"} > bool (time()-120))", "legendFormat": "{{name}}" } ]
+    },
+    {
+      "type": "stat", "title": "Targets up",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [
+        { "refId": "A", "expr": "sum(up)", "legendFormat": "up" },
+        { "refId": "B", "expr": "count(up) - sum(up)", "legendFormat": "down" }
+      ]
+    },
+    {
+      "type": "table", "title": "Public endpoints (blackbox)",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 9 },
+      "targets": [ { "refId": "A", "expr": "probe_success", "format": "table", "instant": true }, { "refId": "B", "expr": "probe_http_duration_seconds{phase=\"processing\"}", "format": "table", "instant": true }, { "refId": "C", "expr": "(probe_ssl_earliest_cert_expiry - time())/86400", "format": "table", "instant": true } ],
+      "transformations": [ { "id": "merge" }, { "id": "organize", "options": { "renameByName": { "instance": "Endpoint", "Value #A": "Up", "Value #B": "Latency(s)", "Value #C": "Cert days" } } } ]
+    },
+    {
+      "type": "stat", "title": "Tunnel status",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 9 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [ { "refId": "A", "expr": "sum(cloudflared_tunnel_ha_connections)", "legendFormat": "HA conns" }, { "refId": "B", "expr": "rate(cloudflared_tunnel_total_requests[5m])", "legendFormat": "req/s" } ]
+    },
+    {
+      "type": "row", "title": "Fleet golden signals (RED)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 }
+    },
+    {
+      "type": "timeseries", "title": "Request rate by service",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [ { "refId": "A", "expr": "sum by (service) (rate(http_request_duration_seconds_count[5m]))", "legendFormat": "{{service}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Error % by service (5xx)",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1 } },
+      "targets": [ { "refId": "A", "expr": "sum by (service) (rate(http_request_duration_seconds_count{status_code=~\"5..\"}[5m])) / clamp_min(sum by (service) (rate(http_request_duration_seconds_count[5m])),0.0001)", "legendFormat": "{{service}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "p99 latency by service",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [ { "refId": "A", "expr": "histogram_quantile(0.99, sum by (service,le) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{service}}" } ]
+    },
+    {
+      "type": "row", "title": "Host (USE)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 }
+    },
+    {
+      "type": "gauge", "title": "CPU %",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 } ] } } },
+      "targets": [ { "refId": "A", "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))*100)" } ]
+    },
+    {
+      "type": "gauge", "title": "Memory %",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 } ] } } },
+      "targets": [ { "refId": "A", "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))*100" } ]
+    },
+    {
+      "type": "gauge", "title": "Disk / used %",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 80 }, { "color": "red", "value": 90 } ] } } },
+      "targets": [ { "refId": "A", "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}))*100" } ]
+    },
+    {
+      "type": "timeseries", "title": "Load average",
+      "datasource": { "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 24 },
+      "targets": [ { "refId": "A", "expr": "node_load1", "legendFormat": "1m" }, { "refId": "B", "expr": "node_load5", "legendFormat": "5m" }, { "refId": "C", "expr": "node_load15", "legendFormat": "15m" } ]
+    },
+    {
+      "type": "alertlist", "title": "Active alerts",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 31 },
+      "options": { "alertInstanceLabelFilter": "", "dashboardAlerts": false, "showOptions": "current", "stateFilter": { "firing": true, "pending": true } }
+    }
+  ]
+}

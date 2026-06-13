@@ -1,0 +1,60 @@
+# Alertmanager — routes alerts to BOTH Telegram (new bot) and Email.
+# Secrets come from the environment (compose passes .env). Alertmanager expands
+# $VAR in this file only for a few fields, so we template via env at deploy where
+# needed; the bot token / smtp password are read from files-less env interpolation
+# is not supported natively, so these are filled by scripts/render-alertmanager.sh
+# at deploy time from .env (see README).
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: '${SMTP_SMARTHOST}'
+  smtp_from: '${SMTP_FROM}'
+  smtp_auth_username: '${SMTP_USER}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+route:
+  receiver: telegram-and-email
+  group_by: ['alertname', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: telegram-only
+      matchers: [ severity="warning" ]
+    - receiver: telegram-and-email
+      matchers: [ severity="critical" ]
+
+receivers:
+  - name: telegram-only
+    telegram_configs:
+      - bot_token: '${TELEGRAM_BOT_TOKEN}'
+        chat_id: ${TELEGRAM_CHAT_ID}
+        parse_mode: HTML
+        message: |
+          {{ range .Alerts }}<b>{{ .Labels.severity | toUpper }}</b> {{ .Labels.alertname }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+
+  - name: telegram-and-email
+    telegram_configs:
+      - bot_token: '${TELEGRAM_BOT_TOKEN}'
+        chat_id: ${TELEGRAM_CHAT_ID}
+        parse_mode: HTML
+        message: |
+          {{ range .Alerts }}<b>🔴 {{ .Labels.severity | toUpper }}</b> {{ .Labels.alertname }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+    email_configs:
+      - to: '${ALERT_EMAIL_TO}'
+        send_resolved: true
+        headers:
+          Subject: '[Oculory] {{ .CommonLabels.severity | toUpper }}: {{ .CommonLabels.alertname }}'
+
+inhibit_rules:
+  # If the whole instance/container is down, suppress its noisy child alerts.
+  - source_matchers: [ alertname="ContainerDown" ]
+    target_matchers: [ severity=~"warning|critical" ]
+    equal: ['service']

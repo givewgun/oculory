@@ -1,0 +1,39 @@
+{
+  "uid": "oculory-logs-traces",
+  "title": "Oculory — Logs & Traces",
+  "tags": ["oculory", "logs", "traces"],
+  "timezone": "Asia/Bangkok",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      { "name": "service", "type": "custom", "query": "All,gunvest,legion,horizon", "current": { "text": "All", "value": ".+" }, "options": [
+        { "text": "All", "value": ".+", "selected": true },
+        { "text": "gunvest", "value": "gunvest" },
+        { "text": "legion", "value": "legion" },
+        { "text": "horizon", "value": "horizon" } ] }
+    ]
+  },
+  "panels": [
+    { "type": "row", "title": "Logs", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "type": "timeseries", "title": "Log volume by level", "datasource": { "uid": "loki" }, "gridPos": { "h": 6, "w": 24, "x": 0, "y": 1 },
+      "targets": [ { "refId": "A", "expr": "sum by (level) (count_over_time({service=~\"$service\"} | json [1m]))", "legendFormat": "{{level}}", "queryType": "range" } ]
+    },
+    {
+      "type": "logs", "title": "Live logs", "datasource": { "uid": "loki" }, "gridPos": { "h": 12, "w": 24, "x": 0, "y": 7 },
+      "options": { "showTime": true, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
+      "targets": [ { "refId": "A", "expr": "{service=~\"$service\"} | json", "queryType": "range" } ]
+    },
+    { "type": "row", "title": "Traces", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 } },
+    {
+      "type": "nodeGraph", "title": "Service map (from span metrics)", "datasource": { "uid": "tempo" }, "gridPos": { "h": 9, "w": 12, "x": 0, "y": 20 },
+      "targets": [ { "refId": "A", "queryType": "serviceMap" } ]
+    },
+    {
+      "type": "table", "title": "Recent traces", "datasource": { "uid": "tempo" }, "gridPos": { "h": 9, "w": 12, "x": 12, "y": 20 },
+      "targets": [ { "refId": "A", "queryType": "traceqlSearch", "filters": [ { "id": "min-dur", "tag": "duration", "operator": ">", "value": "0ms" } ], "limit": 25 } ]
+    }
+  ]
+}

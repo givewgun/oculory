@@ -1,0 +1,64 @@
+{
+  "uid": "oculory-horizon",
+  "title": "Oculory — Horizon",
+  "tags": ["oculory", "horizon"],
+  "timezone": "Asia/Bangkok",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    { "type": "row", "title": "RED — HTTP", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "type": "timeseries", "title": "Request rate by route", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [ { "refId": "A", "expr": "sum by (route) (rate(http_request_duration_seconds_count{service=\"horizon\"}[5m]))", "legendFormat": "{{route}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Errors (4xx / 5xx)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 8, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [ { "refId": "A", "expr": "sum(rate(http_request_duration_seconds_count{service=\"horizon\",status_code=~\"4..\"}[5m]))", "legendFormat": "4xx" }, { "refId": "B", "expr": "sum(rate(http_request_duration_seconds_count{service=\"horizon\",status_code=~\"5..\"}[5m]))", "legendFormat": "5xx" } ]
+    },
+    {
+      "type": "timeseries", "title": "Latency p50/p95/p99", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.5, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"horizon\"}[5m])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"horizon\"}[5m])))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{service=\"horizon\"}[5m])))", "legendFormat": "p99" }
+      ]
+    },
+    { "type": "row", "title": "Panels & external data", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 } },
+    {
+      "type": "table", "title": "Panel data freshness", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [ { "refId": "A", "expr": "time() - horizon_panel_last_update_timestamp_seconds", "format": "table", "instant": true } ],
+      "transformations": [ { "id": "organize", "options": { "renameByName": { "panel": "Panel", "Value": "Age (s)" }, "excludeByName": { "Time": true, "__name__": true, "instance": true, "job": true, "service": true } } } ]
+    },
+    {
+      "type": "timeseries", "title": "External API latency p95 / errors", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [ { "refId": "A", "expr": "histogram_quantile(0.95, sum by (upstream,le) (rate(horizon_upstream_request_duration_seconds_bucket[5m])))", "legendFormat": "{{upstream}} p95" }, { "refId": "B", "expr": "sum by (upstream) (rate(horizon_upstream_requests_total{outcome=\"error\"}[5m]))", "legendFormat": "{{upstream}} err/s" } ]
+    },
+    { "type": "row", "title": "Runtime", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 } },
+    {
+      "type": "timeseries", "title": "Event-loop lag / heap", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 0, "y": 17 },
+      "targets": [ { "refId": "A", "expr": "nodejs_eventloop_lag_p99_seconds{service=\"horizon\"}", "legendFormat": "loop lag p99 (s)" }, { "refId": "B", "expr": "nodejs_heap_size_used_bytes{service=\"horizon\"}", "legendFormat": "heap used" } ]
+    },
+    {
+      "type": "timeseries", "title": "SQLite query rate", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 8, "y": 17 },
+      "targets": [ { "refId": "A", "expr": "sum by (op) (rate(horizon_sqlite_queries_total[5m]))", "legendFormat": "{{op}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Container CPU / mem", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 16, "y": 17 },
+      "fieldConfig": { "defaults": { "unit": "percent" } },
+      "targets": [ { "refId": "A", "expr": "rate(container_cpu_usage_seconds_total{name=\"horizon-app\"}[5m])*100", "legendFormat": "cpu %" } ]
+    },
+    { "type": "row", "title": "Logs & traces", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 } },
+    {
+      "type": "logs", "title": "Recent logs", "datasource": { "uid": "loki" }, "gridPos": { "h": 9, "w": 24, "x": 0, "y": 25 },
+      "options": { "showTime": true, "wrapLogMessage": true, "enableLogDetails": true },
+      "targets": [ { "refId": "A", "expr": "{service=\"horizon\"} | json", "queryType": "range" } ]
+    }
+  ]
+}

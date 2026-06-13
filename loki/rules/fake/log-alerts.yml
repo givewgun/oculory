@@ -1,0 +1,21 @@
+# Loki ruler alert rules (tenant "fake" because auth_enabled=false).
+groups:
+  - name: log-alerts
+    rules:
+      - alert: HighErrorLogRate
+        expr: |
+          sum by (service) (rate({service=~"gunvest|legion|horizon"} | json | level="error" [5m])) > 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.service }} emitting errors"
+          description: "{{ $labels.service }} is logging >1 error/s over 5m."
+
+      - alert: ErrorLogSpike
+        expr: |
+          sum by (service) (count_over_time({service=~"gunvest|legion|horizon"} | json | level="error" [5m])) > 50
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.service }} error spike"
+          description: ">50 error logs in 5m from {{ $labels.service }}."

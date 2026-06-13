@@ -1,0 +1,7 @@
+.env
+*.local
+# rendered from .tmpl at deploy (contains secrets)
+alertmanager/alertmanager.yml
+data/
+*.log
+.DS_Store
