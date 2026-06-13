@@ -69,7 +69,7 @@ allow policy for `aongoong.jp@gmail.com`. (Grafana's own admin login stays as a 
 
 ## Verify
 ```bash
-ssh -i <key> -L 9090:localhost:9090 -L 3000:localhost:3000 ubuntu@161.118.201.235
+ssh -i <key> -L 9090:localhost:9090 -L 3000:localhost:3000 ubuntu@[HOST]
 ```
 - Prometheus `http://localhost:9090/targets` — every target **UP**.
 - Grafana `https://oculory.givewgun.com` (after Access) — dashboards populate.
