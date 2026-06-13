@@ -1,0 +1,107 @@
+name: Oculory CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: oculory-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Validate configs render and compose is well-formed before any deploy.
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render alertmanager template (smoke)
+        run: |
+          export TELEGRAM_BOT_TOKEN=x TELEGRAM_CHAT_ID=0 SMTP_SMARTHOST=x:587 \
+                 SMTP_FROM=x SMTP_USER=x SMTP_PASSWORD=x ALERT_EMAIL_TO=x
+          envsubst < alertmanager/alertmanager.tmpl.yml > alertmanager/alertmanager.yml
+          test -s alertmanager/alertmanager.yml
+
+      - name: Validate docker compose
+        run: |
+          cp .env.example .env
+          docker compose --env-file .env config >/dev/null
+          echo "compose OK"
+
+      - name: Validate Prometheus rules
+        run: |
+          docker run --rm -v "$PWD/prometheus:/p" --entrypoint promtool prom/prometheus:v3.1.0 \
+            check rules /p/rules/platform.yml
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [verify]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-oracle
+      cancel-in-progress: false
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        env:
+          REPO_CLONE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          GRAFANA_ADMIN_PW: ${{ secrets.GRAFANA_ADMIN_PW }}
+          PG_EXPORTER_DSN: ${{ secrets.PG_EXPORTER_DSN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_SMARTHOST: ${{ secrets.SMTP_SMARTHOST }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ubuntu
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: 22
+          envs: REPO_CLONE_TOKEN,GH_REPO,GRAFANA_ADMIN_PW,PG_EXPORTER_DSN,TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,SMTP_SMARTHOST,SMTP_FROM,SMTP_USER,SMTP_PASSWORD,ALERT_EMAIL_TO
+          script: |
+            set -euo pipefail
+            APP_DIR=/opt/oculory
+            REPO_URL="https://x-access-token:${REPO_CLONE_TOKEN}@github.com/${GH_REPO}.git"
+
+            if [ ! -d "$APP_DIR/.git" ]; then
+              sudo rm -rf "$APP_DIR"
+              sudo mkdir -p "$(dirname "$APP_DIR")"
+              sudo git clone "$REPO_URL" "$APP_DIR"
+            fi
+            cd "$APP_DIR"
+            sudo git remote set-url origin "$REPO_URL"
+            sudo git fetch origin main
+            sudo git reset --hard origin/main
+
+            # .env is regenerated from GitHub secrets on every deploy.
+            sudo tee .env >/dev/null <<EOF
+            GRAFANA_ADMIN_PW=${GRAFANA_ADMIN_PW}
+            GUNVEST_NETWORK=docker_default
+            LEGION_NETWORK=app_legion
+            PG_EXPORTER_DSN=${PG_EXPORTER_DSN}
+            TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+            TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+            SMTP_SMARTHOST=${SMTP_SMARTHOST}
+            SMTP_FROM=${SMTP_FROM}
+            SMTP_USER=${SMTP_USER}
+            SMTP_PASSWORD=${SMTP_PASSWORD}
+            ALERT_EMAIL_TO=${ALERT_EMAIL_TO}
+            EOF
+            sudo chmod 600 .env
+
+            # Render alertmanager.yml from the template + secrets.
+            sudo bash -c 'set -a; . ./.env; set +a; envsubst < alertmanager/alertmanager.tmpl.yml > alertmanager/alertmanager.yml'
+
+            sudo docker compose --env-file .env pull --ignore-buildable || true
+            sudo docker compose --env-file .env up -d --remove-orphans
+            sudo docker compose ps
+            echo "Oculory deploy complete at $(date)"
