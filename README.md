@@ -14,8 +14,15 @@ Grafana ── Prometheus (metrics) ── exporters + app /metrics
 ```
 
 Monitored: `gunvest-app`, `gunvest-db`, the 10 `legion-*` containers (NATS/Ollama/agents/api/web),
-`horizon-app`, and the `global-tunnel` cloudflared. See [`docs/METRICS.md`](docs/METRICS.md) for
-the full, audience-segmented metric catalog (NOC / App / Financial).
+`horizon-app`, and the `global-tunnel` cloudflared.
+
+## Documentation
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how it works: the three pillars, data flow,
+  networking, correlation, and CI/CD. **Start here.**
+- **[docs/ONBOARDING.md](docs/ONBOARDING.md)** — step-by-step to **plug a new service/project**
+  into Oculory (instrument metrics/logs/traces, add a scrape target, dashboard, alerts).
+- **[docs/METRICS.md](docs/METRICS.md)** — full, audience-segmented metric catalog (NOC / App /
+  Financial) — the source of truth for every metric name, type, and label.
 
 ## Layout
 ```
