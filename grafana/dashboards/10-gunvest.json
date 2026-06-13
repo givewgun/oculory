@@ -55,8 +55,9 @@
       "targets": [ { "refId": "A", "expr": "nodejs_eventloop_lag_p99_seconds{service=\"gunvest\"}", "legendFormat": "loop lag p99 (s)" }, { "refId": "B", "expr": "nodejs_heap_size_used_bytes{service=\"gunvest\"}", "legendFormat": "heap used" } ]
     },
     {
-      "type": "timeseries", "title": "Background jobs (runs/s)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 8, "y": 17 },
-      "targets": [ { "refId": "A", "expr": "sum by (job_name) (rate(gunvest_job_runs_total[5m]))", "legendFormat": "{{job_name}}" } ]
+      "type": "timeseries", "title": "Background jobs (runs/hr)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 8, "y": 17 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } },
+      "targets": [ { "refId": "A", "expr": "sum by (job_name) (increase(gunvest_job_runs_total[1h]))", "legendFormat": "{{job_name}}" } ]
     },
     {
       "type": "table", "title": "Job freshness (age since last success)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 16, "y": 17 },

@@ -24,7 +24,7 @@ This document explains the moving parts and the data flow. To **add a new servic
               scrape /metrics    │                      │ push                      │ OTLP push
         ┌──────────────────────-─┤              ┌───────┴───────────────────────────┴────────┐
         │ exporters + app targets │              │            Grafana Alloy (collector)       │
-        │  cAdvisor  node-exporter│              │  • tails every container's stdout -> Loki   │
+        │  docker-stats node-exp. │              │  • tails every container's stdout -> Loki   │
         │  postgres  nats  blackbox              │  • OTLP receiver :4317/:4318 -> Tempo       │
         │  cloudflared            │              │    (tail-sampling: keep errors + slow)      │
         │  gunvest/legion/horizon │◀─────────────┘   reads /var/run/docker.sock + log files    │
@@ -52,7 +52,9 @@ Grafana, which is published only through the Cloudflare Tunnel behind Cloudflare
 ### Metrics (pull)
 - Prometheus scrapes `/metrics` endpoints every 15s. Jobs are defined in
   [`prometheus/prometheus.yml`](../prometheus/prometheus.yml).
-- **Exporters** turn infrastructure into metrics: `cadvisor` (containers), `node-exporter`
+- **Exporters** turn infrastructure into metrics: `docker-stats` (per-container CPU/mem/net by
+  name — a small in-repo exporter reading the Docker API, because cAdvisor can't register
+  containers on this host's `overlayfs` storage driver), `node-exporter`
   (host), `postgres-exporter` (gunvest-db), `nats-exporter` (legion-nats :8222),
   `blackbox-exporter` (synthetic HTTP + TLS probes of the public hostnames), and cloudflared's
   own `:2000/metrics`.

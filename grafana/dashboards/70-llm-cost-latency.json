@@ -46,10 +46,11 @@
         "legendFormat": "{{agent}}" } ]
     },
     {
-      "type": "heatmap", "title": "Inference latency distribution (all agents)",
+      "type": "timeseries", "title": "Inference latency p99 by agent",
       "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
-      "options": { "calculate": false, "yAxis": { "unit": "s" } },
-      "targets": [ { "refId": "A", "expr": "sum by (le) (rate(legion_agent_inference_seconds_bucket[10m]))", "format": "heatmap", "legendFormat": "{{le}}" } ]
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "expr": "histogram_quantile(0.99, sum by (agent, le) (rate(legion_agent_inference_seconds_bucket[10m])))", "legendFormat": "{{agent}}" } ]
     },
     {
       "type": "timeseries", "title": "Inference throughput (req/s) by agent",
@@ -76,9 +77,9 @@
       "fieldConfig": { "defaults": { "unit": "bytes" },
         "overrides": [ { "matcher": { "id": "byName", "options": "cpu %" }, "properties": [ { "id": "unit", "value": "percent" }, { "id": "custom.axisPlacement", "value": "right" } ] } ] },
       "targets": [
-        { "refId": "A", "expr": "container_memory_working_set_bytes{name=\"legion-ollama\"}", "legendFormat": "working set" },
-        { "refId": "B", "expr": "container_spec_memory_limit_bytes{name=\"legion-ollama\"}", "legendFormat": "limit" },
-        { "refId": "C", "expr": "rate(container_cpu_usage_seconds_total{name=\"legion-ollama\"}[5m])*100", "legendFormat": "cpu %" }
+        { "refId": "A", "expr": "docker_container_memory_usage_bytes{name=\"legion-ollama\"}", "legendFormat": "working set" },
+        { "refId": "B", "expr": "docker_container_memory_limit_bytes{name=\"legion-ollama\"}", "legendFormat": "limit" },
+        { "refId": "C", "expr": "docker_container_cpu_percent{name=\"legion-ollama\"}", "legendFormat": "cpu %" }
       ]
     },
 

@@ -38,22 +38,22 @@
     {
       "type": "timeseries", "title": "CPU per container", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
       "fieldConfig": { "defaults": { "unit": "percent" } },
-      "targets": [ { "refId": "A", "expr": "topk(15, sum by (name) (rate(container_cpu_usage_seconds_total{name=~\".+\"}[5m]))*100)", "legendFormat": "{{name}}" } ]
+      "targets": [ { "refId": "A", "expr": "topk(15, docker_container_cpu_percent)", "legendFormat": "{{name}}" } ]
     },
     {
       "type": "timeseries", "title": "Memory per container", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
       "fieldConfig": { "defaults": { "unit": "bytes" } },
-      "targets": [ { "refId": "A", "expr": "topk(15, sum by (name) (container_memory_working_set_bytes{name=~\".+\"}))", "legendFormat": "{{name}}" } ]
+      "targets": [ { "refId": "A", "expr": "topk(15, docker_container_memory_usage_bytes)", "legendFormat": "{{name}}" } ]
     },
     {
       "type": "table", "title": "Restarts & OOM (last 24h)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-      "targets": [ { "refId": "A", "expr": "changes(container_start_time_seconds{name=~\".+\"}[24h])", "format": "table", "instant": true }, { "refId": "B", "expr": "increase(container_oom_events_total{name=~\".+\"}[24h])", "format": "table", "instant": true } ],
-      "transformations": [ { "id": "merge" }, { "id": "organize", "options": { "renameByName": { "name": "Container", "Value #A": "Restarts", "Value #B": "OOM kills" }, "excludeByName": { "Time": true, "__name__": true, "id": true, "instance": true, "job": true, "image": true } } } ]
+      "targets": [ { "refId": "A", "expr": "docker_container_restarts", "format": "table", "instant": true }, { "refId": "B", "expr": "docker_container_oom_killed", "format": "table", "instant": true } ],
+      "transformations": [ { "id": "merge" }, { "id": "organize", "options": { "renameByName": { "name": "Container", "Value #A": "Restarts", "Value #B": "OOM killed" }, "excludeByName": { "Time": true, "__name__": true, "id": true, "instance": true, "job": true, "image": true } } } ]
     },
     {
       "type": "timeseries", "title": "Network per container", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "fieldConfig": { "defaults": { "unit": "Bps" } },
-      "targets": [ { "refId": "A", "expr": "topk(10, sum by (name) (rate(container_network_receive_bytes_total[5m])))", "legendFormat": "{{name}} rx" } ]
+      "targets": [ { "refId": "A", "expr": "topk(10, rate(docker_container_network_rx_bytes[5m]))", "legendFormat": "{{name}} rx" } ]
     },
     { "type": "row", "title": "Synthetic probes", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 } },
     {

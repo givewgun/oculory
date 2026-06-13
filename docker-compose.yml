@@ -148,26 +148,18 @@ services:
     logging: *default-logging
 
   # ---------------------------------------------------------------- exporters
-  # Per-container CPU/mem/net/disk + restart/OOM counters.
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
-    container_name: oculory-cadvisor
+  # Per-container CPU/mem/net + restart/OOM, keyed by container NAME.
+  # (cAdvisor can't register containers on this host's `overlayfs` storage
+  # driver, so we read the Docker API directly — see dockerstats/exporter.py.)
+  docker-stats:
+    build: ./dockerstats
+    image: oculory-docker-stats:latest
+    container_name: oculory-docker-stats
     restart: unless-stopped
-    privileged: true
-    command:
-      - --housekeeping_interval=15s
-      - --docker_only=true
-      - --store_container_labels=false
     volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      - /dev/disk:/dev/disk:ro
-    devices:
-      - /dev/kmsg
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [oculory]
-    mem_limit: 256m
+    mem_limit: 128m
     logging: *default-logging
 
   # Host USE: CPU/mem/disk/net/load.

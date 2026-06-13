@@ -10,8 +10,9 @@
   "panels": [
     { "type": "row", "title": "Signal pipeline", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
     {
-      "type": "timeseries", "title": "Cycles (started / completed / failed)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
-      "targets": [ { "refId": "A", "expr": "sum by (status) (rate(legion_cycles_total[15m]))", "legendFormat": "{{status}}" } ]
+      "type": "timeseries", "title": "Cycles per hour (started / completed / failed)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } },
+      "targets": [ { "refId": "A", "expr": "sum by (status) (increase(legion_cycles_total[1h]))", "legendFormat": "{{status}}" } ]
     },
     {
       "type": "stat", "title": "Cycle success ratio (24h)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 4, "x": 8, "y": 1 },
@@ -25,14 +26,20 @@
       "targets": [ { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(legion_cycle_duration_seconds_bucket[30m])))", "legendFormat": "p95" } ]
     },
     {
-      "type": "timeseries", "title": "Signals emitted / votes", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 6, "x": 18, "y": 1 },
-      "targets": [ { "refId": "A", "expr": "sum(rate(legion_signals_total[30m]))", "legendFormat": "signals/s" }, { "refId": "B", "expr": "sum by (agent) (rate(legion_votes_total[30m]))", "legendFormat": "{{agent}} votes/s" } ]
+      "type": "timeseries", "title": "Signals & votes per hour", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 6, "x": 18, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } },
+      "targets": [ { "refId": "A", "expr": "sum(increase(legion_signals_total[1h]))", "legendFormat": "signals" }, { "refId": "B", "expr": "sum by (agent) (increase(legion_votes_total[1h]))", "legendFormat": "{{agent}} votes" } ]
     },
     { "type": "row", "title": "Agents & Ollama (LLM)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 } },
     {
-      "type": "heatmap", "title": "Agent inference latency", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
-      "options": { "calculate": false, "cellGap": 1, "yAxis": { "unit": "s" } },
-      "targets": [ { "refId": "A", "expr": "sum by (le) (rate(legion_agent_inference_seconds_bucket[10m]))", "format": "heatmap", "legendFormat": "{{le}}" } ]
+      "type": "timeseries", "title": "Agent inference latency p50/p95/p99", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.5, sum by (le) (rate(legion_agent_inference_seconds_bucket[10m])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(legion_agent_inference_seconds_bucket[10m])))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(legion_agent_inference_seconds_bucket[10m])))", "legendFormat": "p99" }
+      ]
     },
     {
       "type": "timeseries", "title": "Ollama request latency p50/p95", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 6, "x": 12, "y": 9 },
@@ -42,21 +49,28 @@
     {
       "type": "timeseries", "title": "Ollama container memory (vs 12g cap)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 6, "x": 18, "y": 9 },
       "fieldConfig": { "defaults": { "unit": "bytes" } },
-      "targets": [ { "refId": "A", "expr": "container_memory_working_set_bytes{name=\"legion-ollama\"}", "legendFormat": "working set" }, { "refId": "B", "expr": "container_spec_memory_limit_bytes{name=\"legion-ollama\"}", "legendFormat": "limit" } ]
+      "targets": [ { "refId": "A", "expr": "docker_container_memory_usage_bytes{name=\"legion-ollama\"}", "legendFormat": "working set" }, { "refId": "B", "expr": "docker_container_memory_limit_bytes{name=\"legion-ollama\"}", "legendFormat": "limit" } ]
     },
     { "type": "row", "title": "NATS JetStream", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 } },
     {
-      "type": "timeseries", "title": "Messages in/out", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 0, "y": 18 },
-      "targets": [ { "refId": "A", "expr": "rate(nats_varz_in_msgs[5m])", "legendFormat": "in" }, { "refId": "B", "expr": "rate(nats_varz_out_msgs[5m])", "legendFormat": "out" } ]
+      "type": "timeseries", "title": "Messages in/out (msg/s)", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [ { "refId": "A", "expr": "rate(gnatsd_varz_in_msgs[5m])", "legendFormat": "in" }, { "refId": "B", "expr": "rate(gnatsd_varz_out_msgs[5m])", "legendFormat": "out" } ]
     },
     {
-      "type": "timeseries", "title": "Consumer pending / redelivered", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 8, "y": 18 },
-      "targets": [ { "refId": "A", "expr": "sum by (consumer_name) (nats_consumer_num_pending)", "legendFormat": "{{consumer_name}} pending" }, { "refId": "B", "expr": "sum by (consumer_name) (nats_consumer_num_redelivered)", "legendFormat": "{{consumer_name}} redelivered" } ]
+      "type": "timeseries", "title": "JetStream messages / consumers / streams", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 8, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } },
+      "targets": [
+        { "refId": "A", "expr": "jetstream_server_total_messages", "legendFormat": "messages" },
+        { "refId": "B", "expr": "jetstream_server_total_consumers", "legendFormat": "consumers" },
+        { "refId": "C", "expr": "jetstream_server_total_streams", "legendFormat": "streams" },
+        { "refId": "D", "expr": "gnatsd_varz_slow_consumers", "legendFormat": "slow consumers" }
+      ]
     },
     {
       "type": "timeseries", "title": "NATS server mem / connections", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 8, "x": 16, "y": 18 },
       "fieldConfig": { "defaults": { "unit": "bytes" } },
-      "targets": [ { "refId": "A", "expr": "nats_varz_mem", "legendFormat": "mem" }, { "refId": "B", "expr": "nats_varz_connections", "legendFormat": "conns" } ]
+      "targets": [ { "refId": "A", "expr": "gnatsd_varz_mem", "legendFormat": "mem" }, { "refId": "B", "expr": "gnatsd_varz_connections", "legendFormat": "conns" } ]
     },
     { "type": "row", "title": "API (read) & containers", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 } },
     {
@@ -70,7 +84,7 @@
     {
       "type": "timeseries", "title": "Per-container CPU", "datasource": { "uid": "prometheus" }, "gridPos": { "h": 7, "w": 12, "x": 12, "y": 26 },
       "fieldConfig": { "defaults": { "unit": "percent" } },
-      "targets": [ { "refId": "A", "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"legion-.*\"}[5m]))*100", "legendFormat": "{{name}}" } ]
+      "targets": [ { "refId": "A", "expr": "docker_container_cpu_percent{name=~\"legion-.*\"}", "legendFormat": "{{name}}" } ]
     },
     { "type": "row", "title": "Distributed cycle traces", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 } },
     {

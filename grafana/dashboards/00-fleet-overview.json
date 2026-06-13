@@ -17,7 +17,7 @@
       "gridPos": { "h": 8, "w": 16, "x": 0, "y": 1 },
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }, "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN" }, "1": { "text": "UP" } } } ] } },
       "options": { "mergeValues": true, "showValue": "never" },
-      "targets": [ { "refId": "A", "expr": "max by (name) (container_last_seen{name=~\"gunvest-.*|legion-.*|horizon-.*|global-tunnel\"} > bool (time()-120))", "legendFormat": "{{name}}" } ]
+      "targets": [ { "refId": "A", "expr": "max by (name) (docker_container_up{name=~\"gunvest-.*|legion-.*|horizon-.*|global-tunnel\"})", "legendFormat": "{{name}}" } ]
     },
     {
       "type": "stat", "title": "Targets up",

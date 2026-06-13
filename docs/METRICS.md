@@ -14,11 +14,12 @@ Conventions: durations in **seconds** (histograms, `_bucket/_sum/_count`), count
 | Metric | Type | Source | Notes |
 |---|---|---|---|
 | `up` | gauge | Prometheus | 1 = target scrapable |
-| `container_last_seen` | gauge | cAdvisor | down detection (`time()-x>120`) |
-| `container_cpu_usage_seconds_total` | counter | cAdvisor | per-container CPU |
-| `container_memory_working_set_bytes` / `container_spec_memory_limit_bytes` | gauge | cAdvisor | mem vs limit (Ollama 12g) |
-| `container_oom_events_total` | counter | cAdvisor | OOM kills |
-| `container_start_time_seconds` | gauge | cAdvisor | restarts via `changes()` |
+| `docker_container_up` | gauge | docker-stats | down detection (`== 0`) |
+| `docker_container_cpu_percent` | gauge | docker-stats | per-container CPU % |
+| `docker_container_memory_usage_bytes` / `docker_container_memory_limit_bytes` | gauge | docker-stats | mem vs limit (Ollama 12g) |
+| `docker_container_oom_killed` | gauge | docker-stats | OOM kills |
+| `docker_container_restarts` | gauge | docker-stats | restart count |
+| `docker_container_network_rx_bytes` / `_tx_bytes` | counter | docker-stats | per-container network |
 | `node_cpu_seconds_total`, `node_load1/5/15` | counter/gauge | node-exporter | host CPU + saturation |
 | `node_memory_MemTotal/MemAvailable/Swap*` | gauge | node-exporter | host memory |
 | `node_filesystem_size/avail_bytes` | gauge | node-exporter | disk (the binding constraint) |
@@ -29,8 +30,8 @@ Conventions: durations in **seconds** (histograms, `_bucket/_sum/_count`), count
 | `pg_up`, `pg_stat_activity_count`, `pg_settings_max_connections` | gauge | postgres-exporter | DB connections |
 | `pg_stat_database_blks_hit/blks_read` | counter | postgres-exporter | cache hit ratio |
 | `pg_stat_database_xact_commit/rollback/deadlocks` | counter | postgres-exporter | txn health |
-| `nats_varz_in_msgs/out_msgs/mem/connections` | counter/gauge | nats-exporter | NATS server |
-| `nats_consumer_num_pending/num_redelivered` | gauge | nats-exporter | JetStream consumer lag |
+| `gnatsd_varz_in_msgs/out_msgs/mem/connections/slow_consumers` | counter/gauge | nats-exporter | NATS server |
+| `jetstream_server_total_messages/total_consumers/total_streams` | gauge | nats-exporter | JetStream totals |
 
 ## B. Application — golden signals + domain
 

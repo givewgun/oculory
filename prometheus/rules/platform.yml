@@ -4,14 +4,14 @@ groups:
   - name: availability
     rules:
       - alert: ContainerDown
-        # cAdvisor stops reporting a container that has gone away.
+        # docker-stats exporter reports up=0 for a non-running known container.
         expr: |
-          (time() - container_last_seen{name=~"gunvest-.*|legion-.*|horizon-.*|global-tunnel"}) > 120
+          docker_container_up{name=~"gunvest-.*|legion-.*|horizon-.*|global-tunnel"} == 0
         for: 1m
         labels: { severity: critical }
         annotations:
           summary: "Container {{ $labels.name }} is down"
-          description: "No cAdvisor sample for {{ $labels.name }} for >2m on givewgun VM."
+          description: "{{ $labels.name }} is not running on the givewgun VM."
 
       - alert: TargetDown
         expr: up == 0
@@ -132,7 +132,7 @@ groups:
           description: "{{ $value }} pending messages — a legion worker may be stuck."
 
       - alert: OllamaRestartLoop
-        expr: increase(container_start_time_seconds{name="legion-ollama"}[15m]) > 0 and rate(container_last_seen{name="legion-ollama"}[5m]) >= 0
+        expr: increase(docker_container_restarts{name="legion-ollama"}[15m]) > 0
         for: 0m
         labels: { severity: warning }
         annotations:
@@ -140,7 +140,7 @@ groups:
           description: "Ollama container restarted in the last 15m (OOM at 12g cap?)."
 
       - alert: ContainerOOMKilled
-        expr: increase(container_oom_events_total[10m]) > 0
+        expr: docker_container_oom_killed{name=~"gunvest-.*|legion-.*|horizon-.*"} == 1
         for: 0m
         labels: { severity: critical }
         annotations:
