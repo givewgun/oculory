@@ -1,0 +1,112 @@
+{
+  "uid": "oculory-llm",
+  "title": "Oculory — LLM Latency & Cost (Legion)",
+  "tags": ["oculory", "legion", "llm"],
+  "timezone": "Asia/Bangkok",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "cost_per_hour", "type": "custom", "label": "Compute cost $/CPU-hour",
+        "query": "0,0.01,0.02,0.04,0.08",
+        "current": { "text": "0", "value": "0" },
+        "options": [
+          { "text": "0 (free tier)", "value": "0", "selected": true },
+          { "text": "0.01", "value": "0.01" },
+          { "text": "0.02", "value": "0.02" },
+          { "text": "0.04", "value": "0.04" },
+          { "text": "0.08", "value": "0.08" }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    { "type": "text", "title": "", "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 },
+      "options": { "mode": "markdown", "content": "## Legion LLM latency & compute cost\nLocal Ollama (no per-token API billing) — **cost = compute time**. The cost table multiplies inference compute-seconds by **$cost_per_hour** (set it to your effective VM CPU-hour rate; Oracle A1 free tier = 0). Latency = end-to-end agent reasoning (`legion_agent_inference_seconds`) and raw model latency (`legion_ollama_request_seconds`)." } },
+
+    { "type": "row", "title": "Per-agent latency", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 3 } },
+    {
+      "type": "timeseries", "title": "Agent inference p95 by agent",
+      "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A",
+        "expr": "histogram_quantile(0.95, sum by (agent, le) (rate(legion_agent_inference_seconds_bucket[10m])))",
+        "legendFormat": "{{agent}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Agent inference p50 by agent",
+      "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A",
+        "expr": "histogram_quantile(0.5, sum by (agent, le) (rate(legion_agent_inference_seconds_bucket[10m])))",
+        "legendFormat": "{{agent}}" } ]
+    },
+    {
+      "type": "heatmap", "title": "Inference latency distribution (all agents)",
+      "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "options": { "calculate": false, "yAxis": { "unit": "s" } },
+      "targets": [ { "refId": "A", "expr": "sum by (le) (rate(legion_agent_inference_seconds_bucket[10m]))", "format": "heatmap", "legendFormat": "{{le}}" } ]
+    },
+    {
+      "type": "timeseries", "title": "Inference throughput (req/s) by agent",
+      "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [ { "refId": "A", "expr": "sum by (agent) (rate(legion_agent_inference_seconds_count[5m]))", "legendFormat": "{{agent}}" } ]
+    },
+
+    { "type": "row", "title": "Ollama (model server)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 } },
+    {
+      "type": "timeseries", "title": "Ollama request latency p50/p95/p99",
+      "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.5, sum by (le) (rate(legion_ollama_request_seconds_bucket[10m])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(legion_ollama_request_seconds_bucket[10m])))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(legion_ollama_request_seconds_bucket[10m])))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Ollama memory (working set vs 12g cap) + CPU",
+      "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "fieldConfig": { "defaults": { "unit": "bytes" },
+        "overrides": [ { "matcher": { "id": "byName", "options": "cpu %" }, "properties": [ { "id": "unit", "value": "percent" }, { "id": "custom.axisPlacement", "value": "right" } ] } ] },
+      "targets": [
+        { "refId": "A", "expr": "container_memory_working_set_bytes{name=\"legion-ollama\"}", "legendFormat": "working set" },
+        { "refId": "B", "expr": "container_spec_memory_limit_bytes{name=\"legion-ollama\"}", "legendFormat": "limit" },
+        { "refId": "C", "expr": "rate(container_cpu_usage_seconds_total{name=\"legion-ollama\"}[5m])*100", "legendFormat": "cpu %" }
+      ]
+    },
+
+    { "type": "row", "title": "Compute cost", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 } },
+    {
+      "type": "timeseries", "title": "Compute consumed (inference-seconds/s) by agent",
+      "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "calcs": ["mean", "max"] } },
+      "targets": [ { "refId": "A", "expr": "sum by (agent) (rate(legion_agent_inference_seconds_sum[5m]))", "legendFormat": "{{agent}}" } ]
+    },
+    {
+      "type": "table", "title": "Per-agent cost & volume (dashboard range)",
+      "datasource": { "uid": "prometheus" }, "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "targets": [
+        { "refId": "A", "expr": "sum by (agent) (increase(legion_agent_inference_seconds_count[$__range]))", "format": "table", "instant": true },
+        { "refId": "B", "expr": "sum by (agent) (increase(legion_agent_inference_seconds_sum[$__range])) / 60", "format": "table", "instant": true },
+        { "refId": "C", "expr": "sum by (agent) (increase(legion_agent_inference_seconds_sum[$__range])) / 3600 * $cost_per_hour", "format": "table", "instant": true }
+      ],
+      "transformations": [
+        { "id": "merge" },
+        { "id": "organize", "options": { "renameByName": { "agent": "Agent", "Value #A": "Inferences", "Value #B": "Compute (min)", "Value #C": "Est. cost ($)" }, "excludeByName": { "Time": true } } },
+        { "id": "sortBy", "options": { "fields": "", "sort": [ { "field": "Compute (min)", "desc": true } ] } }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "Est. cost ($)" }, "properties": [ { "id": "unit", "value": "currencyUSD" }, { "id": "decimals", "value": 4 } ] },
+        { "matcher": { "id": "byName", "options": "Compute (min)" }, "properties": [ { "id": "decimals", "value": 1 } ] }
+      ] }
+    }
+  ]
+}
