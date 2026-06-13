@@ -16,6 +16,12 @@ Grafana ── Prometheus (metrics) ── exporters + app /metrics
 Monitored: `gunvest-app`, `gunvest-db`, the 10 `legion-*` containers (NATS/Ollama/agents/api/web),
 `horizon-app`, and the `global-tunnel` cloudflared.
 
+
+<img width="1919" height="907" alt="image" src="https://github.com/user-attachments/assets/addd1cf5-f3fc-4287-8843-5036730f2a22" />
+<img width="1919" height="899" alt="image" src="https://github.com/user-attachments/assets/2e83fc59-8466-403b-b843-29479d72631e" />
+
+
+
 ## Documentation
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how it works: the three pillars, data flow,
   networking, correlation, and CI/CD. **Start here.**
