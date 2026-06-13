@@ -1,6 +1,6 @@
 # Oculory
 
-Observability platform for the **GiveWGun** Oracle A1 VM — one Grafana-based stack covering all
+Observability platform for the Oracle A1 VM — one Grafana-based stack covering all
 **three pillars**: metrics (Prometheus), logs (Loki), and distributed traces (Tempo), collected
 by a single agent (Grafana Alloy) and surfaced as a central fleet dashboard plus per-service
 dashboards. Alerts go to **Telegram and email**. Reachable at `https://oculory.givewgun.com`
