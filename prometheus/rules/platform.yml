@@ -165,7 +165,7 @@ groups:
       - alert: GunvestJobStale
         expr: time() - gunvest_job_last_success_timestamp_seconds{job_name=~"price-check|geo-world|geo-gov|news-refresh"} > 1800
         for: 5m
-        labels: { severity: warning }
+        labels: { severity: warning, cadence: fast }
         annotations:
           summary: "gunvest job {{ $labels.job_name }} stale"
           description: "No successful run of {{ $labels.job_name }} in >30m (≤15m cadence)."
@@ -173,7 +173,7 @@ groups:
       - alert: GunvestJobStale
         expr: time() - gunvest_job_last_success_timestamp_seconds{job_name="geo-analysis"} > 5400
         for: 5m
-        labels: { severity: warning }
+        labels: { severity: warning, cadence: hourly }
         annotations:
           summary: "gunvest job {{ $labels.job_name }} stale"
           description: "No successful run of {{ $labels.job_name }} in >90m (hourly cadence)."
@@ -181,7 +181,7 @@ groups:
       - alert: GunvestJobStale
         expr: time() - gunvest_job_last_success_timestamp_seconds{job_name=~"market-summary|morning-brief"} > 93600
         for: 5m
-        labels: { severity: warning }
+        labels: { severity: warning, cadence: daily }
         annotations:
           summary: "gunvest job {{ $labels.job_name }} stale"
           description: "No successful run of {{ $labels.job_name }} in >26h (daily / 2×-day cadence)."
