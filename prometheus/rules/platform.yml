@@ -158,10 +158,30 @@ groups:
           summary: "Legion cycles failing"
           description: "{{ $value }} failed legion cycles in the last hour."
 
+      # Per-job staleness — thresholds track each job's real cadence (see
+      # `changes(...[24h])`). cramer-refresh is intentionally omitted: the job
+      # is broken and muted for now (re-add when fixed). A flat threshold can't
+      # fit 5m pollers + a daily morning-brief.
       - alert: GunvestJobStale
-        expr: time() - gunvest_job_last_success_timestamp_seconds > 3600
+        expr: time() - gunvest_job_last_success_timestamp_seconds{job_name=~"price-check|geo-world|geo-gov|news-refresh"} > 1800
         for: 5m
         labels: { severity: warning }
         annotations:
           summary: "gunvest job {{ $labels.job_name }} stale"
-          description: "No successful run of {{ $labels.job_name }} in >1h."
+          description: "No successful run of {{ $labels.job_name }} in >30m (≤15m cadence)."
+
+      - alert: GunvestJobStale
+        expr: time() - gunvest_job_last_success_timestamp_seconds{job_name="geo-analysis"} > 5400
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "gunvest job {{ $labels.job_name }} stale"
+          description: "No successful run of {{ $labels.job_name }} in >90m (hourly cadence)."
+
+      - alert: GunvestJobStale
+        expr: time() - gunvest_job_last_success_timestamp_seconds{job_name=~"market-summary|morning-brief"} > 93600
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "gunvest job {{ $labels.job_name }} stale"
+          description: "No successful run of {{ $labels.job_name }} in >26h (daily / 2×-day cadence)."
