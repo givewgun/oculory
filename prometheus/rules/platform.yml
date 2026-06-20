@@ -159,9 +159,9 @@ groups:
           description: "{{ $value }} failed legion cycles in the last hour."
 
       - alert: GunvestJobStale
-        expr: time() - gunvest_job_last_success_timestamp_seconds > 1800
+        expr: time() - gunvest_job_last_success_timestamp_seconds > 3600
         for: 5m
         labels: { severity: warning }
         annotations:
           summary: "gunvest job {{ $labels.job_name }} stale"
-          description: "No successful run of {{ $labels.job_name }} in >30m (market poll = 5m cadence)."
+          description: "No successful run of {{ $labels.job_name }} in >1h."

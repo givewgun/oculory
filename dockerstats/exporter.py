@@ -21,6 +21,7 @@ import http.client
 import json
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DOCKER_SOCK = "/var/run/docker.sock"
@@ -83,6 +84,37 @@ def _net(stats):
     return rx, tx
 
 
+def _collect_container(c):
+    """Returns (lines, errors) for one container. Runs in a worker thread."""
+    out = []
+    errors = 0
+    name = (c.get("Names") or ["/unknown"])[0].lstrip("/")
+    lbl = f'{{name="{name}"}}'
+    running = c.get("State") == "running"
+    out.append(f"docker_container_up{lbl} {1 if running else 0}")
+    cid = c.get("Id")
+    try:
+        ins = _docker_get(f"/containers/{cid}/json")
+        state = ins.get("State", {}) or {}
+        out.append(f"docker_container_restarts{lbl} {ins.get('RestartCount', 0)}")
+        out.append(f"docker_container_oom_killed{lbl} {1 if state.get('OOMKilled') else 0}")
+    except Exception:
+        errors += 1
+    if running:
+        try:
+            st = _docker_get(f"/containers/{cid}/stats?stream=false")
+            ws, lim = _mem(st)
+            rx, tx = _net(st)
+            out.append(f"docker_container_cpu_percent{lbl} {_cpu_percent(st):.3f}")
+            out.append(f"docker_container_memory_usage_bytes{lbl} {ws}")
+            out.append(f"docker_container_memory_limit_bytes{lbl} {lim}")
+            out.append(f"docker_container_network_rx_bytes{lbl} {rx}")
+            out.append(f"docker_container_network_tx_bytes{lbl} {tx}")
+        except Exception:
+            errors += 1
+    return out, errors
+
+
 def collect():
     lines = []
     errors = 0
@@ -106,33 +138,11 @@ def collect():
         containers = []
         errors += 1
 
-    for c in containers:
-        name = (c.get("Names") or ["/unknown"])[0].lstrip("/")
-        lbl = f'{{name="{name}"}}'
-        running = c.get("State") == "running"
-        lines.append(f"docker_container_up{lbl} {1 if running else 0}")
-        cid = c.get("Id")
-        # restart count + oom from inspect (cheap; ~15 containers)
-        try:
-            ins = _docker_get(f"/containers/{cid}/json")
-            state = ins.get("State", {}) or {}
-            lines.append(f"docker_container_restarts{lbl} {ins.get('RestartCount', 0)}")
-            lines.append(f"docker_container_oom_killed{lbl} {1 if state.get('OOMKilled') else 0}")
-        except Exception:
-            errors += 1
-        if not running:
-            continue
-        try:
-            st = _docker_get(f"/containers/{cid}/stats?stream=false")
-            ws, lim = _mem(st)
-            rx, tx = _net(st)
-            lines.append(f"docker_container_cpu_percent{lbl} {_cpu_percent(st):.3f}")
-            lines.append(f"docker_container_memory_usage_bytes{lbl} {ws}")
-            lines.append(f"docker_container_memory_limit_bytes{lbl} {lim}")
-            lines.append(f"docker_container_network_rx_bytes{lbl} {rx}")
-            lines.append(f"docker_container_network_tx_bytes{lbl} {tx}")
-        except Exception:
-            errors += 1
+    if containers:
+        with ThreadPoolExecutor(max_workers=min(32, len(containers))) as ex:
+            for out, errs in ex.map(_collect_container, containers):
+                lines.extend(out)
+                errors += errs
 
     lines.append("# HELP docker_stats_scrape_errors_total Exporter-side errors during scrape")
     lines.append("# TYPE docker_stats_scrape_errors_total counter")
