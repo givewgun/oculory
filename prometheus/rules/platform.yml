@@ -139,13 +139,13 @@ groups:
           summary: "legion-ollama restarted"
           description: "Ollama container restarted in the last 15m (OOM at 12g cap?)."
 
-      - alert: ContainerOOMKilled
-        expr: docker_container_oom_killed{name=~"gunvest-.*|legion-.*|horizon-.*"} == 1
-        for: 0m
-        labels: { severity: critical }
-        annotations:
-          summary: "OOM kill on {{ $labels.name }}"
-          description: "{{ $labels.name }} was OOM-killed — review mem_limit."
+      # - alert: ContainerOOMKilled
+      #   expr: docker_container_oom_killed{name=~"gunvest-.*|legion-.*|horizon-.*"} == 1
+      #   for: 0m
+      #   labels: { severity: critical }
+      #   annotations:
+      #     summary: "OOM kill on {{ $labels.name }}"
+      #     description: "{{ $labels.name }} was OOM-killed — review mem_limit."
 
   # ---------------------------------------------------------- logs (Loki via Prometheus? no -> see loki ruler)
   - name: pipeline
